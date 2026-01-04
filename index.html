@@ -112,6 +112,11 @@
     button:active{ transform: scale(0.99); }
     button.primary{ border-color: rgba(255,255,255,0.55); }
     button.danger{ border-color: rgba(255,80,80,0.65); }
+    button.highlight{ 
+      border-color: rgba(0,150,255,0.8);
+      background: rgba(0,150,255,0.15);
+      box-shadow: 0 0 8px rgba(0,150,255,0.3);
+    }
 
     .sliders{
       display:grid;
@@ -264,13 +269,12 @@
   <div class="output" id="output">
     <div class="text" id="out"></div>
     <div class="controls">
-      <button id="cycleBtn"><span class="icon">🔀</span><span>Cycle</span></button>
-      <button id="speakBtn"><span class="icon">🔊</span><span>Speak</span></button>
+      <button id="cycleBtn" class="highlight"><span class="icon">🔀</span><span>Cycle</span></button>
+      <button id="speakBtn" class="highlight"><span class="icon">🔊</span><span>Speak</span></button>
       <button id="micBtn"><span class="icon">🎤</span><span>Mic</span></button>
       <button id="settingsBtn" style="margin-left:16px;"><span class="icon">⚙️</span><span>Settings</span></button>
-      <button id="clearBtnTop"><span class="icon">❌</span><span>Clear</span></button>
+      <button id="clearBtnTop" class="highlight"><span class="icon">❌</span><span>Clear</span></button>
     </div>
-    <div style="font-size:10px;color:#f80;text-align:center;padding:4px;display:none;" id="safariWarning">⚠️ Safari: Enable mic BEFORE full-screen</div>
   </div>
 
   <div class="sliders" id="sliders" style="display:none;">
@@ -952,17 +956,6 @@
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Monitor stream for suspension (Safari full-screen issue)
-      stream.getTracks().forEach(track => {
-        track.onended = () => {
-          micEnabled = false;
-          toggleMicBtn.textContent = "🎤 Enable Mic";
-          micBtnTop.classList.remove("mic-enabled");
-          document.getElementById('safariWarning').style.display = 'block';
-          document.getElementById('safariWarning').textContent = '⚠️ Mic stopped - tap Mic button to restart';
-        };
-      });
-      
       // Create audio context with iOS compatibility
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       audioContext = new AudioContext();
@@ -1167,15 +1160,8 @@
   colIndex = 0;
   setRunning(true);
   
-  // Enable mic by default and show Safari warning if needed
+  // Enable mic by default
   startMicrophone();
-  
-  // Show Safari warning if on iOS Safari
-  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  if (isSafari && isIOS) {
-    document.getElementById('safariWarning').style.display = 'block';
-  }
 })();
 </script>
 </body>
