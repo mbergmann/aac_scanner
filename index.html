@@ -775,21 +775,14 @@
     if (mode === "ROW") {
       colCycles = 0;
       colIndex = -1;
-      // Disable mic before transitioning to column mode
-      const wasMicEnabled = micEnabled;
-      micEnabled = false;
       mode = "COL";
-      // Clear highlights during mic cooldown to show it's disabled
+      // Clear highlights during transition
       clearHighlights();
       // Wait 300ms for visual transition before starting column scan
       setTimeout(() => {
         tick();
         scheduleNext();
       }, 300);
-      // Re-enable mic after delay
-      if (wasMicEnabled) {
-        setTimeout(() => { micEnabled = true; }, 500);
-      }
     } else {
       // Don't select if indices are invalid
       if (colIndex < 0 || rowIndex < 0) return;
@@ -821,7 +814,8 @@
         justSelected = false; // Skip delay, start immediately at row 0
       }
       setMode("ROW");
-      scheduleNext();
+      // Don't schedule next immediately - wait for cooldown to finish
+      // scheduleNext() will be called after cooldown in mic trigger code
     }
   }
 
@@ -1055,8 +1049,8 @@
           }
         }
         
-        // Check if we should pause scanning based on pause threshold
-        const shouldPause = volume >= pauseThreshold;
+        // Pause only when volume is between pause and trigger thresholds
+        const shouldPause = volume >= pauseThreshold && volume <= threshold;
         
         if (shouldPause && !isPaused && running) {
           isPaused = true;
@@ -1073,8 +1067,8 @@
           triggerIndicator.style.display = 'none';
         }
         
-        // Trigger if loud enough and 500ms since last trigger
-        if (volume > threshold && now - lastSoundTime > 500) {
+        // Trigger if loud enough and 300ms since last trigger
+        if (micEnabled && volume > threshold && now - lastSoundTime > 300) {
           lastSoundTime = now;
           // Show selected cell content in indicator
           if (mode === "COL" && colIndex >= 0) {
@@ -1085,7 +1079,16 @@
               setTimeout(() => triggerIndicator.classList.remove('active'), 300);
             }
           }
+          // Disable mic during cooldown
+          micEnabled = false;
           select();
+          // Clear highlights and wait for cooldown before resuming
+          clearHighlights();
+          setTimeout(() => {
+            micEnabled = true;
+            updateHighlight();
+            scheduleNext();
+          }, 300);
         }
         
         requestAnimationFrame(checkSound);
