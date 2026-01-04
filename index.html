@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>AAC Row/Column Scanner</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗣️</text></svg>">
+  <style>
+    :root{
+      --bg:#000; --fg:#fff; --muted:#aaa;
+      --cellBg: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.25);
+      --rowGlow: rgba(0,150,255,0.15);
+      --hlFill: rgba(0,150,255,0.25);
+      --hlBorder: rgba(0,150,255,1);
+      --radius: 14px;
+      --pad: 12px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg);
+      font-family:-apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    body{ -webkit-user-select:none; user-select:none; display:flex; flex-direction:column; }
+
+    .app{
+      flex: 1;
+      min-height: 0;
+      padding: calc(env(safe-area-inset-top) + 8px)
+               calc(env(safe-area-inset-right) + 8px)
+               8px
+               calc(env(safe-area-inset-left) + 8px);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      overflow:hidden;
+    }
+    .output{
+      border:2px solid var(--border);
+      border-radius:var(--radius);
+      padding:6px 10px;
+      background: rgba(255,255,255,0.04);
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .output .controls{
+      display:flex;
+      gap:4px;
+      flex-shrink:0;
+    }
+    .output .controls button{
+      appearance:none;
+      border:none;
+      border-radius:var(--radius);
+      padding:4px 8px;
+      background: rgba(255,255,255,0.08);
+      color:var(--fg);
+      font-size: clamp(9px, 1.8vw, 12px);
+      font-weight:500;
+      letter-spacing:0.5px;
+      text-transform:uppercase;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      text-align:center;
+      align-items:center;
+      gap:2px;
+    }
+    .output .controls button.mic-enabled{
+      outline: 2px solid rgba(0,200,255,0.8);
+      outline-offset: 2px;
+    }
+    .output .controls button .icon{
+      font-size: clamp(16px, 3.2vw, 24px);
+    }
+    .output .text{
+      font-size: clamp(14px, 2.8vw, 24px);
+      line-height:1.2;
+      min-height:1.4em;
+      word-break: break-word;
+      flex:1;
+    }
+    .output .flipBtn{
+      flex-shrink:0;
+      appearance:none;
+      border:2px solid var(--border);
+      border-radius:var(--radius);
+      padding:6px 10px;
+      background: rgba(255,255,255,0.08);
+      color:var(--fg);
+      font-size: clamp(12px, 2.4vw, 18px);
+      font-weight:700;
+      white-space:nowrap;
+    }
+
+    .controls{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap:6px;
+    }
+    button{
+      appearance:none;
+      border:2px solid var(--border);
+      border-radius:var(--radius);
+      padding:8px 6px;
+      background: rgba(255,255,255,0.04);
+      color:var(--fg);
+      font-size: clamp(13px, 2.2vw, 16px);
+      font-weight:700;
+    }
+    button:active{ transform: scale(0.99); }
+    button.primary{ border-color: rgba(255,255,255,0.55); }
+    button.danger{ border-color: rgba(255,80,80,0.65); }
+
+    .sliders{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:6px;
+      align-items:center;
+    }
+    .sliderBox{
+      border:2px solid var(--border);
+      border-radius:var(--radius);
+      padding:6px 8px;
+      background: rgba(255,255,255,0.04);
+    }
+    .sliderBox .title{
+      font-size:10px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase;
+      margin-bottom:4px;
+    }
+    .sliderBox .row{
+      display:flex; gap:6px; align-items:center;
+    }
+    input[type="range"]{ width:100%; }
+    .val{ min-width:50px; text-align:right; font-variant-numeric: tabular-nums; color:var(--fg); font-size:11px; }
+    .volumeBar{
+      height:20px;
+      background: rgba(255,255,255,0.1);
+      border-radius:4px;
+      overflow:hidden;
+      position:relative;
+      margin-top:4px;
+    }
+    .volumeBar .fill{
+      height:100%;
+      background: linear-gradient(90deg, #0096ff, #00d4ff, #00ffff);
+      width:0%;
+      transition: width 0.05s ease-out;
+    }
+    .volumeBar .pauseLine{
+      position:absolute;
+      top:0;
+      bottom:0;
+      width:2px;
+      background:#ffff00;
+      left:25%;
+      opacity:0.6;
+    }
+    .volumeBar .threshold{
+      position:absolute;
+      top:0;
+      bottom:0;
+      width:2px;
+      background:#fff;
+      left:25%;
+    }
+
+    .grid{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:1px;
+      overflow:hidden;
+    }
+    .row{
+      display:grid;
+      grid-template-columns: repeat(7, minmax(0,1fr));
+      gap:1px;
+      padding:1px;
+      border-radius:var(--radius);
+      border:2px solid transparent;
+    }
+    .row.row-active{
+      background: transparent;
+      border-color: rgba(0,150,255,0.8);
+    }
+    .cell{
+      background: var(--cellBg);
+      border:2px solid var(--border);
+      border-radius: var(--radius);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding: 8px 4px;
+      font-size: clamp(13px, 2.6vw, 26px);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      min-height: clamp(44px, 8vh, 70px);
+    }
+    .cell[data-ri="0"]{
+      font-size: clamp(9px, 1.8vw, 18px);
+      font-weight: 700;
+    }
+    .cell[data-ri="0"][data-ci="0"],
+    .cell[data-ri="0"][data-ci="1"],
+    .cell[data-ri="0"][data-ci="2"]{
+      font-size: clamp(16px, 3.2vw, 24px);
+    }
+    .cell.needs-cell{
+      font-size: clamp(9px, 1.8vw, 16px);
+      font-weight: 600;
+      line-height: 1.1;
+      white-space: pre-line;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .cell.needs-cell .emoji{
+      font-size: clamp(16px, 3.2vw, 24px);
+      line-height: 1;
+    }
+    .cell.needs-cell .label{
+      font-size: clamp(9px, 1.8vw, 14px);
+      font-weight: 600;
+    }
+    .cell.cell-active{
+      background: rgba(255,140,0,0.25);
+      border-color: rgba(255,140,0,1);
+      box-shadow: 0 0 0 2px rgba(255,140,0,0.3);
+    }
+    .hint{
+      display:none;
+    }
+    .trigger-indicator{
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.5);
+      font-size: 120px;
+      opacity: 0;
+      transition: all 1s ease-out;
+      pointer-events: none;
+      z-index: 9999;
+    }
+    .trigger-indicator.active{
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    footer{
+      text-align: center;
+      padding: 4px;
+      font-size: 9px;
+      color: var(--muted);
+      opacity: 0.5;
+    }
+    footer a{ color: #0af; text-decoration: none; }
+    footer a:hover{ text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="trigger-indicator" id="triggerIndicator"></div>
+<div class="app" id="app">
+  <div class="output" id="output">
+    <div class="text" id="out"></div>
+    <div class="controls">
+      <button id="cycleBtn"><span class="icon">🔀</span><span>Cycle</span></button>
+      <button id="speakBtn"><span class="icon">🔊</span><span>Speak</span></button>
+      <button id="micBtn"><span class="icon">🎤</span><span>Mic</span></button>
+      <button id="settingsBtn" style="margin-left:16px;"><span class="icon">⚙️</span><span>Settings</span></button>
+      <button id="clearBtnTop"><span class="icon">❌</span><span>Clear</span></button>
+    </div>
+  </div>
+
+  <div class="sliders" id="sliders" style="display:none;">
+    <div class="sliderBox">
+      <div class="title">Row scan speed</div>
+      <div class="row">
+        <input id="rowSpeed" type="range" min="600" max="2500" step="50" value="1500">
+        <div class="val" id="rowVal">1000ms</div>
+      </div>
+    </div>
+    <div class="sliderBox">
+      <div class="title">Column scan speed</div>
+      <div class="row">
+        <input id="colSpeed" type="range" min="500" max="2000" step="50" value="1500">
+        <div class="val" id="colVal">1000ms</div>
+      </div>
+    </div>
+    <div class="sliderBox" style="grid-column: 1 / -1;">
+      <div class="title">Mic (lower = more sensitive)</div>
+      <div class="volumeBar">
+        <div class="fill" id="volumeFill"></div>
+        <div class="pauseLine" id="pauseLine"></div>
+        <div class="threshold" id="thresholdLine"></div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:rgba(255,255,255,0.6); margin-bottom:4px;">
+        Level: <span id="soundLevel">0</span> <span id="triggerIndicator" style="color:#0ff; font-weight:bold; margin-left:8px; display:none;">TRIGGERED!</span>
+      </div>
+      <div style="margin-top:4px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:13px; min-width:50px;">Pause:</span>
+          <input id="pauseThresholdSlider" type="range" min="0.05" max="30" step="0.05" value="10.0" style="flex:1; margin:0 12px;">
+          <span id="pauseThresholdVal" style="font-size:13px; min-width:45px; text-align:right;">5.0</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:13px; min-width:50px;">Trigger:</span>
+          <input id="soundThreshold" type="range" min="0.05" max="30" step="0.05" value="25.0" style="flex:1; margin:0 12px;">
+          <span id="soundVal" style="font-size:13px; min-width:45px; text-align:right;">10.0</span>
+        </div>
+      </div>
+      <button id="toggleMic" style="width:100%; margin-top:6px;">🎤 Enable Mic</button>
+      <div style="text-align:center; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:10px; opacity:0.6;">
+        <a href="https://github.com/mbergmann/aac_scanner" target="_blank" style="color:#0af; text-decoration:none;">GitHub</a> • 
+        <a href="https://github.com/mbergmann/aac_scanner/issues/new" target="_blank" style="color:#0af; text-decoration:none;">Feedback</a> • 
+        <span style="color:var(--muted);">v0.1</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls" style="display:none;">
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+(() => {
+  // ============================================================================
+  // AAC Row/Column Scanner v1.0
+  // Microphone-controlled communication aid for ALS patients
+  // ============================================================================
+  
+  // GRID DEFINITIONS
+  // Frequency-optimized 5x7 grid with name shortcuts
+  const GRID_LETTERS = [
+    ["✅\nyes","⛔\nno","👩\nCARETAKER","","🔀\ncycle","🔊\nspeak","❌\nclear"],
+    ["SPACE","E","T","A","O","I","N"],
+    ["S","H","R","D","L","U","C"],
+    ["M","W","F","G","Y","P","B"],
+    ["V","K","J","X","Q","Z","."],
+  ];
+
+  // Needs & Emotions board
+  const GRID_NEEDS = [
+    ["💧\nwater","🚽\nbathroom","📞\nphone","😴\ntired","🔀\ncycle","🔊\nspeak","❌\nclear"],
+    ["🥵\nhot","🥶\ncold","🆘\nhelp","👨⚕️\ndoctor","💊\nmedicine","😣\npain","📺\ntv"],
+    ["😊\nthank you","😔\nsorry","😢\nsad","🙏\ngrateful","😨\nscared","❤️\nlove","🤗\nhug"],
+    ["➕\nmore","➖\nless","🛑\nstop","✅\ngo","⏸️\nwait","⏰\nnow","🕐\nlater"],
+  ];
+
+  // Food board
+  const GRID_FOOD = [
+    ["🍕\npizza","🍝\npasta","🥗\nsalad","🍜\nsoup","🔀\ncycle","🔊\nspeak","❌\nclear"],
+    ["🥩\nbeef","🍗\nchicken","🥓\npork","🐟\nfish","🍤\nshrimp","🥚\negg","🧀\ncheese"],
+    ["🍎\napple","🍌\nbanana","🍇\ngrapes","🍊\norange","🍅\ntomato","🥕\ncarrot","🥦\nbroccoli"],
+    ["💧\nwater","🥛\nmilk","🧃\njuice","☕\ncoffee","🥤\nstraw","🍦\nice cream","🍮\npudding"],
+  ];
+
+  let currentGrid = GRID_LETTERS;
+
+  // ============================================================================
+  // STATE MANAGEMENT
+  // ============================================================================
+  let running = false;        // Is scanning active
+  let isPaused = false;       // Is scanning paused (due to sound detection)
+  let mode = "ROW";           // Current mode: "ROW" or "COL"
+  let rowIndex = 0;           // Current row being scanned
+  let colIndex = 0;           // Current column being scanned
+  let timer = null;           // Timeout for next scan step
+  let text = "";              // Accumulated output text
+  let colCycles = 0;          // Number of column scan cycles
+  let justSelected = false;   // Flag to prevent immediate re-selection
+  let micEnabled = false;     // Is microphone active
+  let audioContext = null;    // Web Audio API context
+  let analyser = null;        // Audio analyser node
+  let microphone = null;      // Microphone stream source
+  let lastSoundTime = 0;      // Timestamp of last trigger
+  let suggestions = ["","","",""]; // Autocomplete suggestions
+  let wordList = ["WATER","HELP","THANK"]; // Frequency-sorted word list
+  const triggerIndicator = document.getElementById("triggerIndicator");
+
+  // ============================================================================
+  // SETTINGS PERSISTENCE
+  // ============================================================================
+  const SETTINGS_KEY = 'aac_scanner_settings';
+  
+  function loadSettings() {
+    try {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      if (saved) {
+        const settings = JSON.parse(saved);
+        if (settings.rowSpeed) rowSpeed.value = settings.rowSpeed;
+        if (settings.colSpeed) colSpeed.value = settings.colSpeed;
+        if (settings.soundThreshold) soundThreshold.value = settings.soundThreshold;
+        if (settings.pauseThreshold) pauseThresholdSlider.value = settings.pauseThreshold;
+        updateSliderLabels();
+      }
+    } catch (e) {
+    }
+  }
+  
+  function saveSettings() {
+    try {
+      const settings = {
+        rowSpeed: rowSpeed.value,
+        colSpeed: colSpeed.value,
+        soundThreshold: soundThreshold.value,
+        pauseThreshold: pauseThresholdSlider.value
+      };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {
+    }
+  }
+
+  // ============================================================================
+  // WORD LIST LOADING
+  // ============================================================================
+  // Load frequency-sorted word list from GitHub (MIT licensed, no profanity)
+  // Source: https://github.com/first20hours/google-10000-english
+  fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-no-swears.txt')
+    .then(res => {
+      if (!res.ok) throw new Error('File not found');
+      return res.text();
+    })
+    .then(data => { 
+      wordList = data.split('\n')
+        .map(w => w.trim().toUpperCase())
+        .filter(w => w.length > 0 && /^[A-Z]+$/.test(w));
+    })
+    .catch(e => {
+      // Use fallback word list if file not available
+    });
+
+  // ============================================================================
+  // AUTOCOMPLETE SUGGESTIONS
+  // ============================================================================
+  // Fetch autocomplete suggestions based on current text
+  function updateSuggestions() {
+    const words = text.trim().split(/\s+/);
+    const lastWord = words[words.length - 1] || "";
+    
+    // Always show suggestions once text has been entered
+    if (text.trim().length === 0) {
+      suggestions = ["","","",""];
+      if (currentGrid === GRID_LETTERS) renderGrid();
+      return;
+    }
+
+    // Use word list for instant suggestions
+    const matches = wordList.filter(w => w.startsWith(lastWord.toUpperCase())).slice(0, 4);
+    suggestions = matches.concat(["","","",""]).slice(0, 4);
+    if (currentGrid === GRID_LETTERS) renderGrid();
+  }
+
+  // ============================================================================
+  // DOM ELEMENTS
+  // ============================================================================
+  // Elements
+  const gridEl = document.getElementById("grid");
+  const outEl  = document.getElementById("out");
+  const outputEl = document.getElementById("output");
+  const controlsEl = document.getElementById("controls");
+  const cycleBtn = document.getElementById("cycleBtn");
+  const speakBtnTop = document.getElementById("speakBtn");
+  const micBtnTop = document.getElementById("micBtn");
+  const slidersEl = document.getElementById("sliders");
+  const rowSpeed = document.getElementById("rowSpeed");
+  const colSpeed = document.getElementById("colSpeed");
+  const rowVal   = document.getElementById("rowVal");
+  const colVal   = document.getElementById("colVal");
+  const soundThreshold = document.getElementById("soundThreshold");
+  const soundVal = document.getElementById("soundVal");
+  const pauseThresholdSlider = document.getElementById("pauseThresholdSlider");
+  const pauseThresholdVal = document.getElementById("pauseThresholdVal");
+  const soundLevel = document.getElementById("soundLevel");
+  const volumeFill = document.getElementById("volumeFill");
+  const pauseLine = document.getElementById("pauseLine");
+  const thresholdLine = document.getElementById("thresholdLine");
+  const toggleMicBtn = document.getElementById("toggleMic");
+
+  // ============================================================================
+  // GRID RENDERING
+  // ============================================================================
+  function renderGrid(){
+    gridEl.innerHTML = "";
+    currentGrid.forEach((r, ri) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.dataset.ri = ri;
+      r.forEach((c, ci) => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        
+        // Use suggestions for autocomplete slots in letters grid
+        let content = c;
+        if (currentGrid === GRID_LETTERS && ri === 0 && ci >= 0 && ci <= 3) {
+          // If there's any text, always use suggestion (even if empty)
+          if (text.trim().length > 0) {
+            content = suggestions[ci] || "";
+          } else {
+            // Only show original buttons when no text at all
+            content = c;
+          }
+        }
+        
+        // Override cycle button text to show next board
+        if (content === "🔀\ncycle") {
+          if (currentGrid === GRID_LETTERS) content = "📋\nNeeds";
+          else if (currentGrid === GRID_NEEDS) content = "🍕\nFood";
+          else content = "🔤\nLetters";
+        }
+        
+        // Check if cell contains emoji+text format
+        const parts = content.split('\n');
+        if (parts.length === 2) {
+          cell.classList.add("needs-cell");
+          const emoji = document.createElement("span");
+          emoji.className = "emoji";
+          emoji.textContent = parts[0];
+          const label = document.createElement("span");
+          label.className = "label";
+          label.textContent = parts[1];
+          cell.appendChild(emoji);
+          cell.appendChild(label);
+        } else {
+          cell.textContent = content;
+          // Adjust font size for letters board text-only cells
+          if (currentGrid === GRID_LETTERS && content.length > 6) {
+            cell.style.fontSize = "0.7rem";
+          } else if (currentGrid === GRID_LETTERS && content.length > 4) {
+            cell.style.fontSize = "0.8rem";
+          }
+        }
+        
+        cell.dataset.ri = ri;
+        cell.dataset.ci = ci;
+        row.appendChild(cell);
+      });
+      gridEl.appendChild(row);
+    });
+    updateHighlight();
+  }
+
+  function updateOutput(){
+    outEl.textContent = text || " ";
+    updateSuggestions();
+  }
+
+  function clearHighlights(){
+    document.querySelectorAll(".row").forEach(el => {
+      el.classList.remove("row-active");
+      el.style.background = "";
+      el.style.boxShadow = "";
+    });
+    document.querySelectorAll(".cell").forEach(el => {
+      el.classList.remove("cell-active");
+      el.style.background = "";
+      el.style.boxShadow = "";
+    });
+  }
+
+  function updateHighlight(){
+    clearHighlights();
+    const rowEl = document.querySelector(`.row[data-ri="${rowIndex}"]`);
+    if (!rowEl) return;
+    
+    if (mode === "ROW") {
+      rowEl.classList.add("row-active");
+    } else if (mode === "COL") {
+      rowEl.classList.add("row-active");
+      const cellEl = document.querySelector(`.cell[data-ri="${rowIndex}"][data-ci="${colIndex}"]`);
+      if (cellEl) cellEl.classList.add("cell-active");
+    }
+  }
+
+  function tick(){
+    if (!running) return;
+
+    if (mode === "ROW") {
+      rowIndex = (rowIndex + 1) % currentGrid.length;
+      justSelected = false;
+    } else {
+      // Skip empty cells in column mode
+      let attempts = 0;
+      let cellContent = "";
+      do {
+        colIndex = (colIndex + 1) % currentGrid[0].length;
+        attempts++;
+        
+        // Check if cell is actually empty (considering autocomplete)
+        cellContent = currentGrid[rowIndex][colIndex];
+        if (currentGrid === GRID_LETTERS && rowIndex === 0 && colIndex >= 0 && colIndex <= 3) {
+          const suggestion = suggestions[colIndex];
+          if (suggestion) {
+            cellContent = suggestion;
+          } else if (text.trim().length > 0) {
+            cellContent = "";
+          }
+        }
+      } while (attempts < currentGrid[0].length && cellContent === "");
+      
+      // Check if we completed a full cycle
+      if (colIndex === 0) {
+        colCycles++;
+        if (colCycles >= 3) {
+          // Auto-cancel after 3 cycles
+          colCycles = 0;
+          setMode("ROW");
+          scheduleNext();
+          return;
+        }
+      }
+    }
+    updateHighlight();
+    scheduleNext();
+  }
+
+  function scheduleNext(){
+    if (timer) clearTimeout(timer);
+    // Don't schedule next tick if paused
+    if (isPaused) {
+      return;
+    }
+    let ms = (mode === "ROW") ? Number(rowSpeed.value) : Number(colSpeed.value);
+    // Add 50% delay on first column item only on first cycle
+    if (mode === "COL" && colIndex === 0 && colCycles === 0) {
+      ms += Number(colSpeed.value) * 0.5;
+    }
+    // No extra delay after selection
+    if (mode === "ROW" && justSelected) {
+      ms += 0;
+    }
+    timer = setTimeout(tick, ms);
+  }
+
+  // ============================================================================
+  // SCANNING CONTROL
+  // ============================================================================
+  function setRunning(on){
+    running = on;
+    if (running) scheduleNext();
+    else if (timer) clearTimeout(timer);
+  }
+
+  function setMode(m){
+    mode = m;
+    updateHighlight();
+  }
+
+  function doAction(token){
+    // Determine what to speak
+    let speakText = "";
+    
+    // Extract text from emoji+text format
+    if (token.includes("\n")) {
+      speakText = token.split('\n')[1] || token;
+    } else {
+      speakText = token;
+    }
+    
+    // Speak if not a control button or SPACE
+    if (speakText && speakText !== "🔊" && speakText !== "❌" && speakText !== "SPACE") {
+      // Convert all letters to lowercase on Letters board
+      if (currentGrid === GRID_LETTERS) {
+        speakText = speakText.toLowerCase();
+      }
+      
+      // Disable mic during speech
+      const wasMicEnabled = micEnabled;
+      micEnabled = false;
+      
+      // Chrome workaround: resume if paused
+      if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+      }
+      
+      const utter = new SpeechSynthesisUtterance(speakText);
+      utter.rate = 0.7;
+      
+      // Re-enable mic after speech
+      utter.onend = () => {
+        if (wasMicEnabled) {
+          setTimeout(() => { micEnabled = true; }, 1500);
+        }
+      };
+      
+      // Chrome workaround: pause/resume to force speech
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utter);
+      
+      // Force Chrome to actually speak
+      setTimeout(() => {
+        if (speechSynthesis.paused) {
+          speechSynthesis.resume();
+        }
+      }, 10);
+    }
+
+    if (token === "🔀\ncycle" || token === "📋\nNeeds" || token === "🍕\nFood" || token === "🔤\nLetters") {
+      // Switch boards: Letters -> Needs -> Food -> Letters
+      if (currentGrid === GRID_LETTERS) currentGrid = GRID_NEEDS;
+      else if (currentGrid === GRID_NEEDS) currentGrid = GRID_FOOD;
+      else currentGrid = GRID_LETTERS;
+      renderGrid();
+      rowIndex = 0;
+      colIndex = 0;
+      updateHighlight();
+    }
+    else if (token === "❌\nclear") {
+      // Clear all text and restart
+      text = "";
+      updateOutput();
+    }
+    else if (token === "🔊\nspeak") {
+      // Speak the text
+      const wasMicEnabled = micEnabled;
+      if (wasMicEnabled) {
+        micEnabled = false;
+      }
+      const utter = new SpeechSynthesisUtterance(text.trim() || "");
+      utter.rate = 0.95;
+      let reEnabled = false;
+      utter.onend = () => {
+        if (wasMicEnabled && !reEnabled) {
+          reEnabled = true;
+          micEnabled = true;
+        }
+      };
+      setTimeout(() => {
+        if (wasMicEnabled && !reEnabled) {
+          reEnabled = true;
+          micEnabled = true;
+        }
+      }, 5000);
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utter);
+    }
+    else if (token === "SPACE") text += " ";
+    else if (token === "⬅️") text = text.slice(0, -1);
+    // First row autocomplete slots
+    else if (currentGrid === GRID_LETTERS && rowIndex === 0 && colIndex >= 0 && colIndex <= 3) {
+      if (!token.includes("\n")) {
+        // Autocomplete suggestion - replace last word
+        const words = text.trim().split(/\s+/);
+        words[words.length - 1] = token;
+        text = words.join(" ") + " ";
+      } else {
+        // Original yes/no/CARETAKER buttons
+        const name = token.split('\n')[1];
+        text += name + " ";
+        suggestions = ["","","",""];
+      }
+    }
+    // Needs/Food board - extract text after newline and add space
+    else if ((currentGrid === GRID_NEEDS || currentGrid === GRID_FOOD) && token.includes("\n")) {
+      const textOnly = token.split('\n')[1] || token;
+      text += textOnly + " ";
+    }
+    // Regular letters and other text
+    else {
+      text += token;
+    }
+    updateOutput();
+  }
+
+  // ============================================================================
+  // SELECTION & ACTIONS
+  // ============================================================================
+  // Tap-to-select behavior:
+  // - In ROW mode: select row -> switch to COL mode (scanning inside row)
+  // - In COL mode: select cell -> perform action -> switch back to ROW mode
+  function select(){
+    if (!running) return;
+    if (mode === "ROW") {
+      colCycles = 0;
+      colIndex = -1;
+      // Disable mic before transitioning to column mode
+      const wasMicEnabled = micEnabled;
+      micEnabled = false;
+      mode = "COL";
+      // Clear highlights during mic cooldown to show it's disabled
+      clearHighlights();
+      // Wait 300ms for visual transition before starting column scan
+      setTimeout(() => {
+        tick();
+        scheduleNext();
+      }, 300);
+      // Re-enable mic after delay
+      if (wasMicEnabled) {
+        setTimeout(() => { micEnabled = true; }, 1000);
+      }
+    } else {
+      // Don't select if colIndex is invalid
+      if (colIndex < 0) return;
+      
+      // Get the displayed content, not the grid data
+      let token = currentGrid[rowIndex][colIndex];
+      
+      // For autocomplete slots, use the suggestion if available
+      if (currentGrid === GRID_LETTERS && rowIndex === 0 && colIndex >= 0 && colIndex <= 3) {
+        const suggestion = suggestions[colIndex];
+        if (suggestion) {
+          token = suggestion;
+        } else if (text.trim().length > 0) {
+          // If there's text but no suggestion, don't select (empty slot)
+          colCycles = 0;
+          justSelected = true;
+          setMode("ROW");
+          scheduleNext();
+          return;
+        }
+      }
+      
+      doAction(token);
+      colCycles = 0;
+      justSelected = true;
+      // Start from top row (autocomplete) in Letters mode
+      if (currentGrid === GRID_LETTERS) {
+        rowIndex = -1; // Will increment to 0 on next tick
+      }
+      setMode("ROW");
+      scheduleNext();
+    }
+  }
+
+  // ============================================================================
+  // BOARD SWITCHING
+  // ============================================================================
+  // Buttons
+  function switchBoard() {
+    // Cycle through all 3 boards
+    if (currentGrid === GRID_LETTERS) currentGrid = GRID_NEEDS;
+    else if (currentGrid === GRID_NEEDS) currentGrid = GRID_FOOD;
+    else currentGrid = GRID_LETTERS;
+    
+    updateCycleButtons();
+    renderGrid();
+    if (running) {
+      rowIndex = 0;
+      colIndex = 0;
+      updateHighlight();
+      scheduleNext();
+    }
+  }
+
+  function updateCycleButtons() {
+    // Update cycle button to show next board
+    let nextBoard = "";
+    if (currentGrid === GRID_LETTERS) nextBoard = "📋 Needs";
+    else if (currentGrid === GRID_NEEDS) nextBoard = "🍕 Food";
+    else nextBoard = "🔤 Letters";
+    
+    if (cycleBtn) {
+      cycleBtn.innerHTML = `<span class="icon">${nextBoard.split(' ')[0]}</span><span>${nextBoard.split(' ')[1]}</span>`;
+    }
+  }
+
+  cycleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    switchBoard();
+  });
+
+  speakBtnTop.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const wasMicEnabled = micEnabled;
+    if (wasMicEnabled) {
+      micEnabled = false;
+    }
+    const utter = new SpeechSynthesisUtterance(text.trim() || "");
+    utter.rate = 0.95;
+    utter.onend = () => {
+      if (wasMicEnabled) {
+        setTimeout(() => { micEnabled = true; }, 1500);
+      }
+    };
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
+  });
+
+  micBtnTop.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!micEnabled) {
+      startMicrophone();
+    } else {
+      stopMicrophone();
+    }
+  });
+
+  const clearBtnTop = document.getElementById("clearBtnTop");
+  clearBtnTop.addEventListener("click", (e) => {
+    e.stopPropagation();
+    text = "";
+    updateOutput();
+  });
+
+  const settingsBtn = document.getElementById("settingsBtn");
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isHidden = controlsEl.style.display === "none";
+    controlsEl.style.display = isHidden ? "grid" : "none";
+    slidersEl.style.display = isHidden ? "grid" : "none";
+  });
+
+  // ============================================================================
+  // SETTINGS UI
+  // ============================================================================
+  // Slider labels
+  function updateSliderLabels(){
+    rowVal.textContent = `${rowSpeed.value}ms`;
+    colVal.textContent = `${colSpeed.value}ms`;
+    soundVal.textContent = soundThreshold.value;
+    pauseThresholdVal.textContent = pauseThresholdSlider.value;
+    // Update threshold line position
+    const percent = (soundThreshold.value / 50) * 100;
+    thresholdLine.style.left = `${percent}%`;
+    // Update pause line position
+    const pauseLinePercent = (pauseThresholdSlider.value / 50) * 100;
+    pauseLine.style.left = `${pauseLinePercent}%`;
+  }
+  rowSpeed.addEventListener("input", () => { updateSliderLabels(); saveSettings(); if (running && mode==="ROW") scheduleNext(); });
+  colSpeed.addEventListener("input", () => { updateSliderLabels(); saveSettings(); if (running && mode==="COL") scheduleNext(); });
+  soundThreshold.addEventListener("input", () => { updateSliderLabels(); saveSettings(); });
+  pauseThresholdSlider.addEventListener("input", () => { updateSliderLabels(); saveSettings(); });
+  updateSliderLabels();
+
+  // ============================================================================
+  // TOUCH/CLICK INTERACTION
+  // ============================================================================
+  // Tap on grid for selection
+  gridEl.addEventListener("click", (e) => {
+    select();
+  }, { passive: true });
+
+  gridEl.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    select();
+  }, { passive: false });
+
+  // ============================================================================
+  // MICROPHONE CONTROL
+  // ============================================================================
+  // Microphone sound detection
+  async function startMicrophone() {
+    try {
+      
+      // iOS Safari specific constraints
+      const constraints = {
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Create audio context with iOS compatibility
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioContext = new AudioContext();
+      
+      // iOS requires resuming context after user gesture
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      analyser = audioContext.createAnalyser();
+      microphone = audioContext.createMediaStreamSource(stream);
+      microphone.connect(analyser);
+      analyser.fftSize = 512; // Smaller FFT for faster updates
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -10;
+      analyser.smoothingTimeConstant = 0.3; // Less smoothing for more responsive
+      
+      const bufferLength = analyser.fftSize;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      
+      // Set micEnabled BEFORE starting checkSound
+      toggleMicBtn.textContent = "🎤 Disable Mic";
+      micBtnTop.classList.add("mic-enabled");
+      micEnabled = true;
+      
+      function checkSound() {
+        if (!micEnabled) {
+          // Keep the loop running even when disabled
+          requestAnimationFrame(checkSound);
+          return;
+        }
+        
+        analyser.getByteTimeDomainData(dataArray);
+        
+        // Calculate RMS with amplification for more sensitivity
+        let sum = 0;
+        let max = 0;
+        let min = 255;
+        for (let i = 0; i < bufferLength; i++) {
+          const value = Math.abs(dataArray[i] - 128);
+          sum += value * value;
+          if (value > max) max = value;
+          if (dataArray[i] < min) min = dataArray[i];
+        }
+        
+        const rms = Math.sqrt(sum / bufferLength);
+        const volume = Math.round(rms * 2); // Amplify by 2x for more sensitivity
+        const threshold = soundThreshold.value;
+        const now = Date.now();
+        
+        // Update visual feedback - round to 0.1
+        const displayVolume = Math.round(volume * 10) / 10;
+        soundLevel.textContent = `${displayVolume.toFixed(1)}`;
+        
+        // Update volume bar
+        const barPercent = Math.min((volume / 50) * 100, 100);
+        volumeFill.style.width = `${barPercent}%`;
+        
+        // Fill highlighted row and cell based on volume
+        const activeRow = document.querySelector('.row-active');
+        const activeCell = document.querySelector('.cell-active');
+        
+        // Calculate pause threshold and glow start point (10% before pause)
+        const pauseThreshold = Number(pauseThresholdSlider.value);
+        const glowStart = pauseThreshold * 0.9; // Start 10% before pause threshold
+        
+        // Start glow 10% before pause threshold, interpolate to trigger threshold
+        if (volume >= glowStart) {
+          // Calculate fill percentage relative to glow range (glowStart to threshold)
+          const fillPercent = Math.min(((volume - glowStart) / (threshold - glowStart)) * 100, 100);
+          const glowIntensity = fillPercent / 100;
+          const glowSize = 25 + (glowIntensity * 50); // 25px to 75px
+          
+          // Different colors for row vs column
+          if (mode === "ROW" && activeRow) {
+            const flashColor = `rgba(0,150,255,${0.7 + glowIntensity * 0.3})`; // Blue for row
+            const glowEffect = `inset 0 0 ${glowSize}px ${flashColor}`;
+            activeRow.style.background = "";
+            activeRow.style.boxShadow = glowEffect;
+          }
+          if (mode === "COL" && activeCell) {
+            const flashColor = `rgba(255,140,0,${0.7 + glowIntensity * 0.3})`; // Orange for column
+            const glowEffect = `inset 0 0 ${glowSize}px ${flashColor}`;
+            activeCell.style.background = "";
+            activeCell.style.boxShadow = glowEffect;
+          }
+        } else {
+          // Clear gradients and glow when volume is below glow start
+          if (activeRow) {
+            activeRow.style.background = "";
+            activeRow.style.boxShadow = "";
+          }
+          if (activeCell) {
+            activeCell.style.background = "";
+            activeCell.style.boxShadow = "";
+          }
+        }
+        
+        // Check if we should pause scanning based on pause threshold
+        const shouldPause = volume >= pauseThreshold;
+        
+        if (shouldPause && !isPaused && running) {
+          isPaused = true;
+          if (timer) clearTimeout(timer);
+        } else if (!shouldPause && isPaused && running) {
+          isPaused = false;
+          scheduleNext();
+        }
+        
+        // Show trigger indicator
+        if (volume > threshold) {
+          triggerIndicator.style.display = 'inline';
+        } else {
+          triggerIndicator.style.display = 'none';
+        }
+        
+        // Trigger if loud enough and 500ms since last trigger
+        if (volume > threshold && now - lastSoundTime > 500) {
+          lastSoundTime = now;
+          // Show selected cell content in indicator
+          if (mode === "COL" && colIndex >= 0) {
+            const cell = gridEl.children[rowIndex]?.children[colIndex];
+            if (cell) {
+              triggerIndicator.textContent = cell.textContent.split('\n')[0]; // Just the emoji
+              triggerIndicator.classList.add('active');
+              setTimeout(() => triggerIndicator.classList.remove('active'), 300);
+            }
+          }
+          select();
+        }
+        
+        requestAnimationFrame(checkSound);
+      }
+      
+      checkSound();
+    } catch (err) {
+      alert("Microphone error: " + err.message + "\n\nTry: Settings → Safari → Camera & Microphone → Allow");
+      micEnabled = false;
+    }
+  }
+
+  function stopMicrophone() {
+    if (microphone) {
+      microphone.disconnect();
+      microphone = null;
+    }
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
+    toggleMicBtn.textContent = "🎤 Enable Mic";
+    micBtnTop.classList.remove("mic-enabled");
+    micEnabled = false;
+  }
+
+  toggleMicBtn.addEventListener("click", async () => {
+    if (micEnabled) {
+      stopMicrophone();
+    } else {
+      // Safari requires user gesture - call directly from click handler
+      await startMicrophone();
+    }
+  });
+
+  // ============================================================================
+  // KEYBOARD SUPPORT
+  // ============================================================================
+  // Optional keyboard support (if later you add a Bluetooth switch that sends Space/Enter)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      select();
+    }
+  });
+
+  // ============================================================================
+  // INITIALIZATION
+  // ============================================================================
+  // Init
+  renderGrid();
+  updateOutput();
+  setMode("ROW");
+  updateHighlight();
+  updateCycleButtons();
+  loadSettings(); // Load saved settings
+  
+  // Auto-start on load
+  rowIndex = 0;
+  colIndex = 0;
+  setRunning(true);
+  
+  // Enable mic by default
+  startMicrophone();
+})();
+</script>
+</body>
+</html>
