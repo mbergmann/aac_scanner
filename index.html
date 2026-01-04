@@ -521,6 +521,15 @@
         const parts = content.split('\n');
         if (parts.length === 2) {
           cell.classList.add("needs-cell");
+          
+          // Highlight control buttons in purple
+          const labelText = parts[1].toLowerCase();
+          if (labelText === 'cycle' || labelText === 'needs' || labelText === 'food' || 
+              labelText === 'letters' || labelText === 'speak' || labelText === 'clear') {
+            cell.style.borderColor = 'rgba(150,100,255,0.6)';
+            cell.style.background = 'rgba(150,100,255,0.1)';
+          }
+          
           const emoji = document.createElement("span");
           emoji.className = "emoji";
           emoji.textContent = parts[0];
@@ -531,6 +540,13 @@
           cell.appendChild(label);
         } else {
           cell.textContent = content;
+          
+          // Green border for autocomplete cells with suggestions
+          if (currentGrid === GRID_LETTERS && ri === 0 && ci >= 0 && ci <= 3 && content && text.trim().length > 0) {
+            cell.style.borderColor = 'rgba(100,255,100,0.6)';
+            cell.style.background = 'rgba(100,255,100,0.08)';
+          }
+          
           // Adjust font size for letters board text-only cells
           if (currentGrid === GRID_LETTERS && content.length > 6) {
             cell.style.fontSize = "0.7rem";
