@@ -270,6 +270,7 @@
       <button id="settingsBtn" style="margin-left:16px;"><span class="icon">⚙️</span><span>Settings</span></button>
       <button id="clearBtnTop"><span class="icon">❌</span><span>Clear</span></button>
     </div>
+    <div style="font-size:10px;color:#f80;text-align:center;padding:4px;display:none;" id="safariWarning">⚠️ Safari: Enable mic BEFORE full-screen</div>
   </div>
 
   <div class="sliders" id="sliders" style="display:none;">
@@ -376,6 +377,7 @@
   let analyser = null;        // Audio analyser node
   let microphone = null;      // Microphone stream source
   let lastSoundTime = 0;      // Timestamp of last trigger
+  let isAboveThreshold = false; // Track if volume is currently above threshold
   let suggestions = ["","","",""]; // Autocomplete suggestions
   let wordList = ["WATER","HELP","THANK"]; // Frequency-sorted word list
   const triggerIndicator = document.getElementById("triggerIndicator");
@@ -950,6 +952,17 @@
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
+      // Monitor stream for suspension (Safari full-screen issue)
+      stream.getTracks().forEach(track => {
+        track.onended = () => {
+          micEnabled = false;
+          toggleMicBtn.textContent = "🎤 Enable Mic";
+          micBtnTop.classList.remove("mic-enabled");
+          document.getElementById('safariWarning').style.display = 'block';
+          document.getElementById('safariWarning').textContent = '⚠️ Mic stopped - tap Mic button to restart';
+        };
+      });
+      
       // Create audio context with iOS compatibility
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       audioContext = new AudioContext();
@@ -1065,10 +1078,13 @@
           triggerIndicator.style.display = 'inline';
         } else {
           triggerIndicator.style.display = 'none';
+          // Reset threshold flag when volume drops below
+          isAboveThreshold = false;
         }
         
-        // Trigger if loud enough and 300ms since last trigger
-        if (micEnabled && volume > threshold && now - lastSoundTime > 300) {
+        // Trigger if loud enough, 300ms since last trigger, and volume previously dropped below threshold
+        if (micEnabled && volume > threshold && !isAboveThreshold && now - lastSoundTime > 300) {
+          isAboveThreshold = true;
           lastSoundTime = now;
           // Show selected cell content in indicator
           if (mode === "COL" && colIndex >= 0) {
@@ -1151,8 +1167,15 @@
   colIndex = 0;
   setRunning(true);
   
-  // Enable mic by default
+  // Enable mic by default and show Safari warning if needed
   startMicrophone();
+  
+  // Show Safari warning if on iOS Safari
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isSafari && isIOS) {
+    document.getElementById('safariWarning').style.display = 'block';
+  }
 })();
 </script>
 </body>
