@@ -791,8 +791,8 @@
         setTimeout(() => { micEnabled = true; }, 500);
       }
     } else {
-      // Don't select if colIndex is invalid
-      if (colIndex < 0) return;
+      // Don't select if indices are invalid
+      if (colIndex < 0 || rowIndex < 0) return;
       
       // Get the displayed content, not the grid data
       let token = currentGrid[rowIndex][colIndex];
