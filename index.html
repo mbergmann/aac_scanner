@@ -815,11 +815,11 @@
       doAction(token);
       colCycles = 0;
       justSelected = true;
+      setMode("ROW");
       // Start from top row (autocomplete) in Letters mode
       if (currentGrid === GRID_LETTERS) {
-        rowIndex = -1; // Will increment to 0 on next tick
+        rowIndex = 0;
       }
-      setMode("ROW");
       scheduleNext();
     }
   }
